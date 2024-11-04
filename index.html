@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Münster Protected Sites Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <style>
+        
+        #map {
+            height: 100vh;
+            width: 100vw;
+        }
+        body {
+            margin: 0;
+            
+            font-family: Arial, sans-serif;
+        }
+        .error-message {
+            color: red;
+            padding: 10px;
+            display: none;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="loading" class="loading">Loading protected sites...</div>
+    <div id="error" class="error-message"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script>
+        // Initialize the map centered on Münster
+        const map = L.map('map').setView([51.9607, 7.6261], 11);
+        const loadingElement = document.getElementById('loading');
+        const errorElement = document.getElementById('error');
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Add marker for Münster
+        const munsterMarker = L.marker([51.9607, 7.6261])
+            .bindPopup('<strong>Münster</strong>')
+            .addTo(map);
+
+        // Show loading indicator
+        loadingElement.style.display = 'block';
+
+        // Load and style the GeoJSON data
+        fetch('geo.geojson')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Hide loading indicator
+                loadingElement.style.display = 'none';
+
+                const protectedSites = L.geoJSON(data, {
+                    style: function(feature) {
+                        return {
+                            color: '#2b8a3e',
+                            weight: 2,
+                            opacity: 1,
+                            fillColor: '#40c057',
+                            fillOpacity: 0.4
+                        };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        // Try different common property names for the site name
+                        const siteName = feature.properties.name || 
+                                       feature.properties.NAME ||
+                                       feature.properties.Name ||
+                                       feature.properties.BEZEICH ||
+                                       feature.properties.bezeich ||
+                                       'Protected Site';
+
+                        layer.bindPopup(`<strong>${siteName}</strong>`);
+
+                        // Highlight on hover
+                        layer.on({
+                            mouseover: function(e) {
+                                const layer = e.target;
+                                layer.setStyle({
+                                    fillOpacity: 0.7,
+                                    weight: 3,
+                                    color: '#1a6829'
+                                });
+                                layer.bringToFront();
+                            },
+                            mouseout: function(e) {
+                                protectedSites.resetStyle(e.target);
+                            },
+                            click: function(e) {
+                                map.fitBounds(e.target.getBounds());
+                            }
+                        });
+                    }
+                }).addTo(map);
+
+                // Fit the map to show all protected sites
+                map.fitBounds(protectedSites.getBounds());
+
+                // Add a legend
+                const legend = L.control({position: 'bottomright'});
+                legend.onAdd = function(map) {
+                    const div = L.DomUtil.create('div', 'legend');
+                    div.style.backgroundColor = 'white';
+                    div.style.padding = '10px';
+                    div.style.borderRadius = '5px';
+                    div.style.border = '2px solid #2b8a3e';
+                    div.innerHTML = '<strong>Protected Sites</strong><br>' +
+                                  '<div style="background: #40c057; opacity: 0.4; width: 20px; height: 20px; display: inline-block; margin: 5px;"></div> Protected Area';
+                    return div;
+                };
+                legend.addTo(map);
+            })
+            .catch(error => {
+                // Hide loading indicator and show error
+                loadingElement.style.display = 'none';
+                errorElement.style.display = 'block';
+                errorElement.textContent = 'Error loading protected sites data. Please check that geo.geojson is in the same folder as this HTML file.';
+                console.error('Error:', error);
+            });
+    </script>
+</body>
+</html>
